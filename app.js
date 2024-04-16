@@ -47,6 +47,7 @@ function authenticateToken(request, response, next) {
         response.status(401)
         response.send('Invalid JWT Token')
       } else {
+        request.username = payload.username
         next()
       }
     })
@@ -55,15 +56,15 @@ function authenticateToken(request, response, next) {
 
 //VALIDATE PASSWORD
 const validatePassword = password => {
-  return password.length > 4
+  return password.length > 5
 }
 
 //REGISTER API
 app.post('/register/', async (request, response) => {
   const {username, password, name, gender} = request.body
-  const hashedPassword = await bcrypt.hash(password, 10)
   const selectUserQuery = `SELECT * FROM user WHERE username = '${username}';`
   const databaseUser = await database.get(selectUserQuery)
+  const hashedPassword = await bcrypt.hash(password, 10)
 
   if (databaseUser === undefined) {
     const createUserQuery = `
@@ -118,10 +119,28 @@ app.post('/login/', async (request, response) => {
 
 //TWEETS OF FOLLOWING USER
 
-app.get("/user/tweets/feed/",authenticateToken,async (request,response){
-  const {username, password} = request.body
-  const selectUserQuery = `SELECT * FROM user WHERE username = '${username}';`
-  const databaseUser = await database.get(selectUserQuery)
+app.get('/user/tweets/feed/', authenticateToken, async (request, response) => {
+  const userName = request.username
+  const idQuery = `SELECT user_id FROM user WHERE username = '${userName}';`
+  const dbase = await database.get(idQuery)
+  const {user_id} = dbase
+  const tweetsQuery = `
+      SELECT
+      user.username, tweet.tweet, tweet.date_time AS dateTime
+        FROM
+      follower
+      INNER JOIN tweet
+      ON follower.following_user_id = tweet.user_id
+      INNER JOIN user
+      ON tweet.user_id = user.user_id
+      WHERE
+      follower.follower_user_id = ${user_id}
+      ORDER BY
+      tweet.date_time DESC
+      LIMIT 4;`
+  const databaseUser = await database.run(tweetsQuery)
+
+  response.send(databaseUser)
 })
 
 module.exports = app;
