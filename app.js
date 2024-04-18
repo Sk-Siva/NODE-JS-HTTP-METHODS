@@ -10,7 +10,6 @@ const databasePath = path.join(__dirname, 'twitterClone.db')
 const app = express()
 
 app.use(express.json())
-
 let database = null
 
 const initializeDbAndServer = async () => {
@@ -174,14 +173,31 @@ app.get('/user/followers/', authenticateToken, async (request, response) => {
 })
 
 //API 6
-app.get('/tweets/:tweetTd/', authenticateToken, async (request, response) => {
-  const {username} = request
+
+app.get('/tweets/:tweetId/', authenticateToken, async (request, response) => {
   const {tweetId} = request.params
+  const {username} = request
   const idQuery = `SELECT user_id FROM user WHERE username = '${username}';`
   const dbase = await database.get(idQuery)
   const {user_id} = dbase
-  const tweetQuery = `
-  SELECT tweet.tweet,
+  const tweetsQuery = `
+SELECT
+*
+FROM tweet
+WHERE tweet_id=${tweetId};
+`
+  const tweetResult = await database.get(tweetsQuery)
+  const userFollowersQuery = `
+SELECT
+*
+FROM follower INNER JOIN user on user.user_id = follower.following_user_id
+WHERE follower.follower_user_id = ${user_id};`
+  const userFollowers = await database.all(userFollowersQuery)
+  if (
+    userFollowers.some(item => item.following_user_id === tweetResult.user_id)
+  ) {
+    const getTweetQuery = `
+        SELECT tweet.tweet,
        COUNT(DISTINCT like.like_id) as likes,
        COUNT(DISTINCT reply.reply_id) as replies,
        tweet.date_time as dateTime
@@ -191,12 +207,11 @@ app.get('/tweets/:tweetTd/', authenticateToken, async (request, response) => {
       LEFT JOIN reply ON tweet.tweet_id = reply.tweet_id
       WHERE follower.follower_user_id = ${user_id} AND tweet.tweet_id =${tweetId};`
 
-  const tweetsUser = await database.all(tweetQuery)
-  if (tweetsUser === undefined) {
+    const tweetsLikeUser = await database.all(getTweetQuery)
+    response.send(tweetsLikeUser)
+  } else {
     response.status(401)
     response.send('Invalid Request')
-  } else {
-    response.send(tweetsUser)
   }
 })
 
@@ -205,13 +220,27 @@ app.get(
   '/tweets/:tweetId/likes/',
   authenticateToken,
   async (request, response) => {
-    const {username} = request
     const {tweetId} = request.params
+    const {username} = request
     const idQuery = `SELECT user_id FROM user WHERE username = '${username}';`
     const dbase = await database.get(idQuery)
     const {user_id} = dbase
-
-    const selectUserLikesName = `
+    const tweetsQuery = `
+      SELECT
+    *
+    FROM tweet
+    WHERE tweet_id=${tweetId};`
+    const tweetResult = await database.get(tweetsQuery)
+    const userFollowersQuery = `
+SELECT
+*
+FROM follower INNER JOIN user on user.user_id = follower.following_user_id
+WHERE follower.follower_user_id = ${user_id};`
+    const userFollowers = await database.all(userFollowersQuery)
+    if (
+      userFollowers.some((item) => item.following_user_id === tweetResult.user_id)
+    ) {
+      const selectUserLikesName = `
     SELECT user.username
     FROM follower
     JOIN tweet ON follower.following_user_id = tweet.user_id
@@ -220,8 +249,12 @@ app.get(
     WHERE follower.follower_user_id = ${user_id}
     AND tweet.tweet_id =${tweetId};`
 
-    const likesQuery = await database.all(selectUserLikesName)
-    response.send(likesQuery)
+      const likesQuery = await database.all(selectUserLikesName)
+      response.send(likesQuery)
+    } else {
+      response.status(401)
+      response.send('Invalid Request')
+    }
   },
 )
 
@@ -230,11 +263,27 @@ app.get(
   '/tweets/:tweetId/replies/',
   authenticateToken,
   async (request, response) => {
-    const {username} = request
     const {tweetId} = request.params
-    const idQuery = `SELECT user_id FROM user WHERE username = '${username}';`
-    const dbase = await database.get(idQuery)
-    const {user_id} = dbase
+  const {username} = request
+  const idQuery = `SELECT user_id FROM user WHERE username = '${username}';`
+  const dbase = await database.get(idQuery)
+  const {user_id} = dbase
+  const tweetsQuery = `
+SELECT
+*
+FROM tweet
+WHERE tweet_id=${tweetId};
+`
+  const tweetResult = await database.get(tweetsQuery);
+  const userFollowersQuery = `
+SELECT
+*
+FROM follower INNER JOIN user on user.user_id = follower.following_user_id
+WHERE follower.follower_user_id = ${user_id};`
+  const userFollowers = await database.all(userFollowersQuery)
+  if (
+    userFollowers.some(item => item.following_user_id === tweetResult.user_id)
+  ){
 
     const selectUserReplies = `SELECT user.name,
        reply.reply
@@ -244,7 +293,11 @@ app.get(
 
     const repliesQuery = await database.all(selectUserReplies)
     response.send(repliesQuery)
-  },
+  }else{
+    response.status(401);
+    response.send("Invalid Request");
+  }
+  }
 )
 
 //API 9
